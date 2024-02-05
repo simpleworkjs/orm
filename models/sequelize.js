@@ -19,14 +19,18 @@ function setUp(config) {
 			return toSequilze;
 		}
 
-		static init(fields){
-			super.init(fields);
-			this.__sequelizeFeilds = this.parseFields(this.fields)
+		static init(){
+			this.__sequelizeFeilds = this.parseFields(this.fieldInstances)
 			this.backingModel = this.makeBackingModel(this.name, Model)
 			this.backingModel.init(this.__sequelizeFeilds, {
 				sequelize,
 				modelName: this.name,
 			});
+
+		}
+
+		static async migrate(){
+			this.backingModel.sync();
 		}
 
 		static parseSaveError(error){
@@ -44,7 +48,8 @@ function setUp(config) {
 		}
 
 		static async list(args){
-			return await this.backingModel.findAll(args);
+			let res = (await this.backingModel.findAll({where: args})).map((e)=> new this(e));
+			return res;
 		}
 
 		static async create(fields){
@@ -59,7 +64,7 @@ function setUp(config) {
 
 		static async get(pk){
 			let instance = await this.backingModel.findByPk(pk);
-			return new this(instance);
+			return instance ? new this(instance) : null;
 		}
 
 		async update(fields){

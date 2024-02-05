@@ -38,6 +38,34 @@ class BaseModel{
 
 			return error;
 		},
+		ModelPrimaryKeyToMany: (modelName, fieldName, currnetPrimaryName)=>{
+			const error = new Error('ModelPrimaryKeyToMany');
+			error.modelName = modelName;
+			error.message = `Model (${modelName}) can only have 1 primary key. Can not set (${fieldName}) over (${currnetPrimaryName})`;
+
+			return error;
+		},
+		ModelPrimaryKeyRelation: (modelName, fieldName)=>{
+			const error = new Error('ModelPrimaryKeyRelation');
+			error.modelName = modelName;
+			error.message = `Model (${modelName}) field (${fieldName}) relation can not be the primaryKey`
+
+			return error;
+		},
+		ModelPrimaryKeyMissing: (modelName)=>{
+			const error = new Error('ModelPrimaryKeyMissing');
+			error.modelName = modelName;
+			error.message = `Model (${modelName}) is missing the primaryKey`
+
+			return error;
+		},
+		ModelRelationshipRemoteMissing: (modelName, fieldName, remoteModel)=>{
+			const error = new Error('ModelRelationshipRemoteMissing');
+			error.modelName = modelName;
+			error.message = `Model (${modelName}) field (${fieldName}) can not find remote model (${remoteModel}).`
+
+			return error;
+		},
 	}
 
 	static makeBackingModel(name, cls) {
@@ -49,55 +77,108 @@ class BaseModel{
 	}
 
 	static parseFieldsBase(obj){
-		for(let [key, options] of Object.entries(obj)){
-			options = typeof options === "string" ? {type: options} : options;
-			if(!fields[options.type]) throw new Error(`UnkownFieldType ${key} ${options.type}`);
-			options.name = key
-			obj[key] = new fields[options.type]({inModel: this.name, ...options})
-		}
+		this.fieldInstances = {};
+		this.fieldInstancesRelationships = {};
 
-		return obj;
+		this.primaryKey = null;
+		for(let [fieldName, options] of Object.entries(obj)){
+			options = typeof options === "string" ? {type: options} : options;
+			if(!fields[options.type]) throw new Error(
+				`UnkownFieldType ${fieldName} ${options.type}`
+			);
+
+			let fieldInstance = new fields[options.type]({
+				Model: this,
+				name: fieldName,
+				...options
+			});
+
+			if(fieldInstance instanceof fields.FieldRelationship){
+				if(fieldInstance.primaryKey) throw this.errors.ModelPrimaryKeyRelation(this.name, fieldName);
+
+				this.fieldInstancesRelationships[fieldInstance.name] = fieldInstance;
+			}else{
+				if(fieldInstance.primaryKey){
+					if(this.primaryKey) throw this.errors.ModelPrimaryKeyToMany(
+						this.name,
+						fieldName,
+						this.primaryKey.name
+					);
+					this.primaryKey = fieldInstance;
+				}
+
+				this.fieldInstances[fieldName] = fieldInstance;
+			}
+
+			if(!this.primaryKey) throw this.errors.ModelPrimaryKeyMissing(this.name);
+		}
 	}
 
-	static init(fields){
+
+	static parseRelationship(){
+		// this.matchRelationships()
+		for(const [fieldName, fieldInstance] of Object.entries(this.fieldInstancesRelationships)){
+			fieldInstance.remoteModel = this.models[fieldInstance.remoteModel];
+			if(!this.models[fieldInstance.remoteModel.name]) throw this.errors.ModelRelationshipRemoteMissing(
+				this.name, fieldName, fieldInstance.remoteModel.name
+			);
+
+			// fieldInstance.checkAmbiguous();
+
+			console.log(`\nparseRelationship: ${fieldInstance.Model.name}.${fieldInstance.name} ${fieldInstance.type} ${fieldInstance.remoteModel.name}.${fieldInstance.remoteKey}`)
+
+			fieldInstance.makeRelation(this);
+			// delete this.fieldInstancesRelationships[fieldName];
+
+		}
+	}
+
+	static register(){
 		this.modelName = this.name;
 		if(this.models[this.name]) throw this.errors.ModelNotUnique(this.name);
-
 		this.models[this.name] = this;
-		this.fields = this.parseFieldsBase(fields);
+
+		this.parseFieldsBase(this.fields);
 	}
 
-	static validate(fields, partial){
+	static async migrateAll(){
+		for(let modelName in this.models){
+			await this.models[modelName].migrate();
+		}
+	}
+
+	static validate(fields, partial, values){
 		let errors = {};
 		let validated = {}
+		values = values || fields
 
-		for(const [name, fieldInstance] of Object.entries(this.fields)){
+		for(const [name, fieldInstance] of Object.entries(this.fieldInstances)){
 			// Skip if required field not part of a partial validate
 			if(fieldInstance.isRequired && !fields[name] && partial) continue;
+			if(!fieldInstance.isRequired && !fields[name]) continue;
 
-			if(!fieldInstance.isRequired && !fields[name]){
-				continue;
-			}
 			try{
-				fieldInstance.validate(fields[name]);
+				fieldInstance.validate(values[name]);
 				validated[name] = fields[name];
 			}catch(error){
-				if(!errors[name]) errors[name] = [];
-				errors[name].push(error.message);
+				console.log('models base.js validate', error.stack)
+				if(!errors[name]) errors[name] = error.message;
 			}
 		}
 
-		if(Object.keys(errors).length) throw this.errors.ModelValidation(this.modelName, errors);
+		if(Object.keys(errors).length) throw this.errors.ModelValidation(
+			this.modelName, errors
+		);
 		return validated;
 	}
 
 	static async preSave(fields, partial){
-		this.validate(fields, partial)
 		let toSave = {};
-		for(const [name, fieldInstance] of Object.entries(this.fields)){
+		for(const [name, fieldInstance] of Object.entries(this.fieldInstances)){
 			let newValue = await fieldInstance.preSave(fields[name]);
-			if(newValue) toSave[name] = newValue
+			if(newValue) toSave[name] = newValue;
 		}
+		this.validate(fields, partial, toSave);
 
 		return toSave;
 	}
@@ -112,17 +193,19 @@ class BaseModel{
 		if(!(backingInstance instanceof this.constructor.backingModel)) throw new Error('instance not accepted')
 		setNonEnumerable(backingInstance, backingInstance, this);
 		
-		for(let [name, fieldOptions] of Object.entries(this.constructor.fields)){
+		for(let [name, fieldOptions] of Object.entries(this.constructor.fieldInstances)){
 			if(backingInstance.dataValues[name] === undefined) continue;
 			if(fieldOptions.isPrivate) setNonEnumerable(name, backingInstance.dataValues[name], this);
 			else this[name] = backingInstance.dataValues[name];
-			
 			if(fieldOptions.methodToInject) this.methodInject(fieldOptions.methodToInject(name, this));
 		}
+
+		setNonEnumerable('primaryKey', this[this.constructor.primaryKey.name], this);
 	}
 
 	methodInject({name, method}){
-		setNonEnumerable(name, method.bind(this), this);
+		console.log('injecting', name, 'into', this.constructor.name)
+		setNonEnumerable(name, method, this);
 	}
 
 	static list(args){

@@ -11,19 +11,19 @@ class Field {
 	// Error handling for field validation and options
 	errors = {
 		// Validation error for field values
-		fieldValidationError: function (reason, message) {
+		fieldValidationError: (reason, messages) => {
 			const error = new Error('KeyValidationError');
 			error.reason = reason;
-			error.model = this.belongsToModel;
+			error.model = this.Model.modelName || this.Model;
 			error.key = this.name;
-			error.message = message || reason;
+			error.message = Array.isArray(messages) ? messages : [messages];
 			return error
 		},
 		// Error for invalid field options
-		fieldOptionError: function (reason, message) {
+		fieldOptionError: (reason, message) => {
 			const error = new Error('KeyOptionError');
 			error.reason = reason;
-			error.model = this.belongsToModel;
+			error.model = this.Model;
 			error.key = this.name;
 			error.message = message || reason;
 			return error
@@ -34,6 +34,8 @@ class Field {
 	constructor(args) {
 		// Field properties
 		this.name = args.name;
+		this.type = args.type;
+		this.Model = args.Model;
 		this.primaryKey = args.primaryKey ?? false;
 		this.unique = (this.primaryKey || args.unique) ?? false;
 
@@ -54,7 +56,7 @@ class Field {
 		);
 
 		// Check if the field value has the correct type
-		if (this.typeOfJs && typeof value !== this.typeOfJs) throw new this.errors.fieldValidationError(
+		if (this.typeOfJs && typeof value !== this.typeOfJs) throw this.errors.fieldValidationError(
 			'type',
 			`Field must be type of ${this.typeOfJs}.`
 		);

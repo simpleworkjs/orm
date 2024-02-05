@@ -31,9 +31,9 @@ function setUp(conf) {
 			return {_keymap, _key: primaryKeyFields.pop().name};
 		}
 
-		static init(fields){
-			super.init(fields);
-			let {__keyMap, __key} = this.parseFields(this.fields);
+		static init(){
+			super.init();
+			let {__keyMap, __key} = this.parseFields(this.fieldInstances);
 			this.backingModel = this.makeBackingModel(this.name, Table);
 			this.backingModel._keymap = __keyMap;
 			this.makeBackingModel._key = __key;

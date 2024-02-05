@@ -9,6 +9,8 @@ const { Field } = require('./base');
 // Importing the bcrypt library for password hashing
 const bcrypt = require('bcrypt');
 
+const UUID = require('uuid');
+
 // Subclass for string fields with additional validations
 class FieldString extends Field {
 	// Constructor for the FieldString class
@@ -28,10 +30,15 @@ class FieldString extends Field {
 		// Calling the validation method of the base Field class
 		super.validate(value);
 		// Checking for minimum and maximum length constraints
-		if (this.min && value.length < this.min)
-			throw this.errors.fieldValidationError('toShort', `Field must be longer than ${this.min} characters.`);
-		if (this.max && value.length > this.max)
-			throw this.errors.fieldValidationError('toLong', `Field can not have more ${this.max} characters.`);
+		if (this.min && value.length < this.min)throw this.errors.fieldValidationError(
+			'toShort',
+			`Field must be longer than ${this.min} characters.`
+		);
+			
+		if (this.max && value.length > this.max) throw this.errors.fieldValidationError(
+			'toLong',
+			`Field can not have more ${this.max} characters.`
+		);
 	}
 	// Type information for JavaScript and Sequelize
 	sequelizeType = DataTypes.STRING;
@@ -48,18 +55,22 @@ class FieldString extends Field {
 // Subclass for UUIDv4 fields, inheriting from FieldString
 class FieldUUIDv4 extends FieldString {
 	// Validation method for UUIDv4 fields with length constraints
-	validate(value) {
-		args.min = 36;
-		args.max = 36;
-		this.super(value);
-		// Checking if the value is a valid UUIDv4 using a utility function
-		if (!utils.uuidValidate(value, 4))
-			throw this.errors.fieldValidationError('type', `Field must be a valid UUIDV4`);
-	}
 
 	// Type information for JavaScript and Sequelize
 	typeOfJs = 'string';
 	sequelizeType = DataTypes.UUIDV4;
+
+	default = UUID.v4
+
+	validate(value) {
+		super.validate(value);
+		// Checking if the value is a valid UUIDv4 using a utility function
+		if (!UUID.validate(value)) throw this.errors.fieldValidationError(
+			'type',
+			`Field must be a valid UUIDV4`
+		);
+	}
+
 }
 
 class Fieldbcrypt extends FieldString{
@@ -102,24 +113,25 @@ class FieldPassword extends Fieldbcrypt {
 	// Validation method for password fields
 	validate(value) {
 		// Calling the validation method of the base FieldString class
-		super.validate(value);
 		let errors = []
-		for(let check of this.complexityChecks){
+		for(let check of ['validate', ...this.complexityChecks]){
 			try{
 				this.complexity[check](value)
 			}catch(error){
-				errors.push(error.message)
+				// console.log('here', error.message)
+				errors.push(error.message[0])
 			}
 		}
 		if(errors.length) throw this.errors.fieldValidationError(
 			'passwordComplexity',
-			errors.join(', ')+'.'
+			errors
 		);
 
 	}
 
 	// Complexity functions for password validation
 	complexity = {
+		validate: (value)=>{super.validate(value)},
 		upper: (value) => {
 			if (!/[A-Z]/.test(value))throw this.errors.fieldValidationError(
 				'passwordComplexity',
