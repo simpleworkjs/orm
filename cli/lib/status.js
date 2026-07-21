@@ -4,7 +4,7 @@ const {buildDesiredSchema, buildCurrentSchema, diffSchemas} = require('./schema'
 
 module.exports = async function status(ctx) {
   const desired = buildDesiredSchema(ctx.models);
-  const current = buildCurrentSchema(ctx.paths.migrations);
+  const current = await buildCurrentSchema(ctx.paths.migrations);
   const diff = diffSchemas(current, desired);
 
   ctx.log('Current schema tables:', Object.keys(current).join(', ') || '(none)');

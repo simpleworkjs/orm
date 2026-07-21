@@ -6,7 +6,7 @@ const {buildDesiredSchema, buildCurrentSchema, diffSchemas, formatColumnsToStrin
 
 module.exports = async function migrateMake(ctx) {
   const desired = buildDesiredSchema(ctx.models);
-  const current = buildCurrentSchema(ctx.paths.migrations);
+  const current = await buildCurrentSchema(ctx.paths.migrations);
   const diff = diffSchemas(current, desired);
 
   if (diff.create.length === 0 && diff.update.length === 0) {
@@ -18,83 +18,52 @@ module.exports = async function migrateMake(ctx) {
     fs.mkdirSync(ctx.paths.migrations, {recursive: true});
   }
 
+  const name = ctx.args[0] || 'auto';
+  const fileName = `${timestamp()}-${name}.js`;
+  const filePath = path.join(ctx.paths.migrations, fileName);
+
+  const upCreates = [];
+  const downCreates = [];
   for (const item of diff.create) {
-    generateCreateMigration(item.tableName, item.columns, ctx.paths.migrations, ctx.args[0]);
+    const cols = formatColumnsToString(item.columns);
+    upCreates.push(`await queryInterface.createTable("${item.tableName}", {\n${cols}\n    });`);
+    downCreates.unshift(`await queryInterface.dropTable("${item.tableName}");`);
   }
 
+  const upUpdates = [];
+  const downUpdates = [];
   for (const item of diff.update) {
-    generateUpdateMigration(item, ctx.paths.migrations, ctx.args[0]);
+    for (const col of item.added) {
+      upUpdates.push(`await queryInterface.addColumn('${item.tableName}', '${col.name}', {${formatColumnAttrToString(col.def)}});`);
+      downUpdates.unshift(`await queryInterface.removeColumn('${item.tableName}', '${col.name}');`);
+    }
+    for (const col of item.removed) {
+      upUpdates.push(`await queryInterface.removeColumn('${item.tableName}', '${col.name}');`);
+      downUpdates.unshift(`await queryInterface.addColumn('${item.tableName}', '${col.name}', {${formatColumnAttrToString(col.def)}});`);
+    }
   }
+
+  const upEntries = [...upCreates, ...upUpdates];
+  const downEntries = [...downUpdates, ...downCreates];
+
+  const content = `'use strict';
+
+/** @type {import('sequelize-cli').Migration} */
+module.exports = {
+  async up(queryInterface, Sequelize) {
+    ${upEntries.join('\n    ') || '// no changes'}
+  },
+
+  async down(queryInterface, Sequelize) {
+    ${downEntries.join('\n    ') || '// no changes'}
+  }
+};
+`;
+
+  fs.writeFileSync(filePath, content);
+  ctx.log(`✅ Created migration: ${filePath}`);
 };
 
 function timestamp() {
-  return new Date().toISOString().replace(/[-T:Z.]/g, '').slice(0, 14);
-}
-
-function generateCreateMigration(tableName, columns, migrationsPath, suffix) {
-  const name = suffix || `create-${tableName}`;
-  const fileName = `${timestamp()}-${name}.js`;
-  const filePath = path.join(migrationsPath, fileName);
-  const cols = formatColumnsToString(columns);
-
-  const content = `'use strict';
-
-/** @type {import('sequelize-cli').Migration} */
-module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("${tableName}", {
-      ${cols}
-    });
-  },
-
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("${tableName}");
-  }
-};
-`;
-
-  fs.writeFileSync(filePath, content);
-  console.log(`✅ Created migration: ${filePath}`);
-  return filePath;
-}
-
-function generateUpdateMigration(item, migrationsPath, suffix) {
-  const name = suffix || `update-${item.tableName}`;
-  const fileName = `${timestamp()}-${name}.js`;
-  const filePath = path.join(migrationsPath, fileName);
-
-  const upEntries = [];
-  const downEntries = [];
-
-  for (const col of item.added) {
-    upEntries.push(`queryInterface.addColumn('${item.tableName}', '${col.name}', {${formatColumnAttrToString(col.def)}})`);
-    downEntries.push(`queryInterface.removeColumn('${item.tableName}', '${col.name}')`);
-  }
-
-  for (const col of item.removed) {
-    upEntries.push(`queryInterface.removeColumn('${item.tableName}', '${col.name}')`);
-    downEntries.push(`queryInterface.addColumn('${item.tableName}', '${col.name}', {${formatColumnAttrToString(col.def)}})`);
-  }
-
-  const content = `'use strict';
-
-/** @type {import('sequelize-cli').Migration} */
-module.exports = {
-  async up(queryInterface, Sequelize) {
-    return Promise.all([
-      ${upEntries.join(',\n\t\t\t')}
-    ]);
-  },
-
-  async down(queryInterface, Sequelize) {
-    return Promise.all([
-      ${downEntries.join(',\n\t\t\t')}
-    ]);
-  }
-};
-`;
-
-  fs.writeFileSync(filePath, content);
-  console.log(`✅ Created migration: ${filePath}`);
-  return filePath;
+  return String(Date.now());
 }

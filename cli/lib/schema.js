@@ -66,25 +66,29 @@ function loadMigrationFiles(migrationsPath) {
     .sort();
 }
 
-function parseMigrationFile(filePath) {
-  let tableName = null;
-  let columns = {};
-  let removedColumns = [];
+async function parseMigrationFile(filePath) {
+  const tables = {};
+
+  function ensureTable(t) {
+    if (!tables[t]) tables[t] = {columns: {}, removedColumns: []};
+    return tables[t];
+  }
 
   const queryInterface = {
-    createTable: (t, f) => {
-      tableName = t;
-      columns = f;
+    createTable: (t, columns) => {
+      ensureTable(t).columns = {...columns};
     },
     addColumn: (t, col, def) => {
-      tableName = t;
-      columns[col] = def;
+      ensureTable(t).columns[col] = def;
     },
     removeColumn: (t, col) => {
-      tableName = t;
-      removedColumns.push(col);
+      const table = ensureTable(t);
+      table.removedColumns.push(col);
+      delete table.columns[col];
     },
-    dropTable: () => {},
+    dropTable: (t) => {
+      delete tables[t];
+    },
     renameColumn: () => {},
     changeColumn: () => {},
     addConstraint: () => {},
@@ -93,34 +97,36 @@ function parseMigrationFile(filePath) {
 
   const migration = require(filePath);
   if (typeof migration.up === 'function') {
-    migration.up(queryInterface, DataTypes);
+    await migration.up(queryInterface, DataTypes);
   }
 
-  for (const col of Object.keys(columns)) {
-    columns[col].exists = true;
+  for (const table of Object.values(tables)) {
+    for (const col of Object.keys(table.columns)) {
+      table.columns[col].exists = true;
+    }
   }
 
-  return {tableName, columns, removedColumns};
+  return tables;
 }
 
-function buildCurrentSchema(migrationsPath) {
+async function buildCurrentSchema(migrationsPath) {
   const files = loadMigrationFiles(migrationsPath);
   const schema = {};
 
   for (const file of files) {
-    const info = parseMigrationFile(path.join(migrationsPath, file));
-    if (!info.tableName) continue;
+    const tables = await parseMigrationFile(path.join(migrationsPath, file));
+    for (const [tableName, info] of Object.entries(tables)) {
+      if (!schema[tableName]) {
+        schema[tableName] = {columns: {}};
+      }
 
-    if (!schema[info.tableName]) {
-      schema[info.tableName] = {columns: {}};
-    }
+      for (const [col, def] of Object.entries(info.columns)) {
+        schema[tableName].columns[col] = def;
+      }
 
-    for (const [col, def] of Object.entries(info.columns)) {
-      schema[info.tableName].columns[col] = def;
-    }
-
-    for (const col of info.removedColumns) {
-      delete schema[info.tableName].columns[col];
+      for (const col of info.removedColumns) {
+        delete schema[tableName].columns[col];
+      }
     }
   }
 
