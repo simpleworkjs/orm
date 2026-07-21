@@ -158,6 +158,27 @@ await one.delete();
 
 Instance data is accessed as normal properties. `toJSON()` returns a plain object without private fields.
 
+### Exposing custom methods
+
+A model can declare `static exposedMethods` to mark its own instance or
+static methods for exposure (e.g. as REST endpoints by `@simpleworkjs/backend`).
+`Model.getExposedMethods()` validates and normalizes the declaration
+(auto-detecting instance vs. static, filling defaults, computing the route
+template), and `Model.toPaths().methods` surfaces them for discovery:
+
+```js
+class Thread extends Model {
+  static exposedMethods = [
+    {method: 'inviteUser', route: 'invite', verb: 'post', args: {from: 'body', names: ['username', 'role']}},
+    {method: 'search', verb: 'get', args: {from: 'query', names: ['q']}}, // static method
+  ];
+  async inviteUser(username, role) { /* ... */ }
+  static async search(q) { /* ... */ }
+}
+```
+
+See the [`@simpleworkjs/backend` README](https://github.com/simpleworkjs/backend#exposed-methods) for the full field reference and how they mount as routes.
+
 ## Migrations
 
 When used with `@simpleworkjs/backend`, the CLI can diff your model definitions against existing migration files and generate Sequelize-compatible migrations. See the backend CLI documentation for the migration workflow.

@@ -128,3 +128,65 @@ describe('BaseModel', () => {
     assert.strictEqual(schema.display.titleField, 'title');
   });
 });
+
+describe('BaseModel.getExposedMethods', () => {
+  class Thread extends BaseModel {
+    static fields = {id: {type: 'uuid', primaryKey: true}};
+    static exposedMethods = [
+      {method: 'inviteUser', route: 'invite', verb: 'post', args: {from: 'body', names: ['username', 'role']}},
+      {method: 'getParticipants', verb: 'get'},
+      {method: 'removeUser', route: 'users', verb: 'delete', args: {from: 'params', names: ['username']}, permission: 'update'},
+      {method: 'search', verb: 'get', args: {from: 'query', names: ['q']}, description: 'Search threads'},
+    ];
+    async inviteUser() {}
+    async getParticipants() {}
+    async removeUser() {}
+    static async search() {}
+  }
+  Thread._register();
+
+  const byName = Object.fromEntries(Thread.getExposedMethods().map(m => [m.method, m]));
+
+  it('detects instance vs static methods', () => {
+    assert.strictEqual(byName.inviteUser.kind, 'instance');
+    assert.strictEqual(byName.search.kind, 'static');
+  });
+
+  it('mounts instance methods under the pk and static methods at the root', () => {
+    assert.strictEqual(byName.inviteUser.routePath, '/:id/invite');
+    assert.strictEqual(byName.search.routePath, '/search');
+  });
+
+  it('defaults route to the method name and permission from the verb', () => {
+    assert.strictEqual(byName.getParticipants.routePath, '/:id/getParticipants');
+    assert.strictEqual(byName.getParticipants.permission, 'read'); // get -> read
+    assert.strictEqual(byName.inviteUser.permission, 'update');    // post -> update
+    assert.strictEqual(byName.removeUser.permission, 'update');    // explicit override
+  });
+
+  it('turns params-sourced args into path segments', () => {
+    assert.strictEqual(byName.removeUser.routePath, '/:id/users/:username');
+  });
+
+  it('carries the description through (empty string when absent)', () => {
+    assert.strictEqual(byName.search.description, 'Search threads');
+    assert.strictEqual(byName.inviteUser.description, '');
+  });
+
+  it('surfaces methods in toPaths with a full path template', () => {
+    const paths = Thread.toPaths();
+    const search = paths.methods.find(m => m.method === 'search');
+    assert.strictEqual(search.path, '/Thread/search');
+    assert.strictEqual(search.verb, 'get');
+    assert.strictEqual(search.kind, 'static');
+  });
+
+  it('throws when a declared method exists as neither instance nor static', () => {
+    class Bad extends BaseModel {
+      static fields = {id: {type: 'uuid', primaryKey: true}};
+      static exposedMethods = [{method: 'doesNotExist', verb: 'get'}];
+    }
+    Bad._register();
+    assert.throws(() => Bad.getExposedMethods(), /neither an instance method/);
+  });
+});

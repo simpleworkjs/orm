@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1
+
+### Added
+
+- **`static exposedMethods` + `getExposedMethods()`** (`lib/base.js`): models can
+  declare instance or static/class methods to expose (e.g. as REST endpoints via
+  `@simpleworkjs/backend`). `getExposedMethods()` validates and normalizes each
+  entry — auto-detecting instance vs. static, defaulting `route`/`verb`/
+  `permission` (from the verb), turning `params` args into path segments, and
+  computing the mounted route template — and throws if a named method exists as
+  neither. `toPaths()` now includes a `methods` array so the methods are
+  discoverable through the backend's `OPTIONS` endpoint.
+
 ## 0.2.0
 
 ### Changed
