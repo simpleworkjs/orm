@@ -104,7 +104,7 @@ describe('SequelizeAdapter', () => {
     const Task = makeModel('Task', {
       id: uuidPk(),
     }, [
-      {type: 'hasOne', model: 'User', foreignKey: 'createdById'},
+      {name: 'createdBy', type: 'hasOne', model: 'User', foreignKey: 'createdById'},
     ]);
 
     User.orm = Task.orm = bindORM({User, Task}, adapter);
@@ -113,7 +113,32 @@ describe('SequelizeAdapter', () => {
     adapter.registerModel(Task);
     adapter.associateModels([User, Task]);
 
-    assert.ok(User.backingModel.associations.tasks, 'User hasMany tasks association');
-    assert.ok(Task.backingModel.associations.User, 'Task belongsTo User association');
+    assert.ok(User.backingModel.associations.createdByTasks, 'User hasMany reverse association');
+    assert.ok(Task.backingModel.associations.createdBy, 'Task belongsTo User association');
+  });
+
+  it('does not collide reverse aliases when two hasOne fields target the same remote model', () => {
+    const adapter = new SequelizeAdapter({dialect: 'sqlite', storage: ':memory:', logging: false});
+    const User = makeModel('User', {
+      id: uuidPk(),
+    });
+    const Task = makeModel('Task', {
+      id: uuidPk(),
+    }, [
+      {name: 'createdBy', type: 'hasOne', model: 'User', foreignKey: 'createdById'},
+      {name: 'updatedBy', type: 'hasOne', model: 'User', foreignKey: 'updatedById'},
+    ]);
+
+    User.orm = Task.orm = bindORM({User, Task}, adapter);
+
+    adapter.registerModel(User);
+    adapter.registerModel(Task);
+
+    // Before the fix, both reverse associations fell back to the same
+    // `${Model.name.toLowerCase()}s` alias ("tasks") and the second
+    // `hasMany` call would throw or silently overwrite the first.
+    assert.doesNotThrow(() => adapter.associateModels([User, Task]));
+    assert.ok(User.backingModel.associations.createdByTasks);
+    assert.ok(User.backingModel.associations.updatedByTasks);
   });
 });

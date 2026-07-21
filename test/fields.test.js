@@ -32,6 +32,20 @@ describe('Field types', () => {
     assert.strictEqual(def.validate.max, 100);
   });
 
+  it('integer field with only min set does not inject an undefined max', () => {
+    const f = fields.create('count', {type: 'int', min: 0});
+    const def = f.toSequelize();
+    assert.strictEqual(def.validate.min, 0);
+    assert.strictEqual('max' in def.validate, false);
+  });
+
+  it('integer field with only max set does not inject an undefined min', () => {
+    const f = fields.create('count', {type: 'int', max: 100});
+    const def = f.toSequelize();
+    assert.strictEqual(def.validate.max, 100);
+    assert.strictEqual('min' in def.validate, false);
+  });
+
   it('float field produces FLOAT', () => {
     const f = fields.create('rating', {type: 'float'});
     assert.strictEqual(f.toSequelize().type, DataTypes.FLOAT);

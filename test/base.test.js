@@ -48,6 +48,69 @@ describe('BaseModel', () => {
     assert.ok(Task.relationships.find(r => r.type === 'hasMany'));
   });
 
+  it('_register defaults hasMany foreignKey to this model\'s name, not the remote model\'s', () => {
+    // A User hasMany 'tasks' (model: 'Task') with no explicit remoteKey should
+    // guess the FK column on Task as `userId` (belongsTo-style, referencing
+    // the model that declares the hasMany), not `taskId` (the remote model's
+    // own name, which would point Task at itself).
+    class User extends BaseModel {
+      static fields = {
+        id: {type: 'uuid', primaryKey: true},
+        tasks: {type: 'hasMany', model: 'Task'},
+      };
+    }
+
+    User._register();
+    const field = User.fieldInstances.tasks;
+    assert.strictEqual(field.foreignKey, 'userId');
+  });
+
+  it('_register keeps an explicit hasMany remoteKey as the foreignKey', () => {
+    class User extends BaseModel {
+      static fields = {
+        id: {type: 'uuid', primaryKey: true},
+        tasks: {type: 'hasMany', model: 'Task', remoteKey: 'ownerId'},
+      };
+    }
+
+    User._register();
+    assert.strictEqual(User.fieldInstances.tasks.foreignKey, 'ownerId');
+  });
+
+  it('getRelated resolves hasMany using the corrected foreignKey', async () => {
+    class Task extends BaseModel {
+      static fields = {
+        id: {type: 'uuid', primaryKey: true},
+        userId: {type: 'uuid'},
+      };
+    }
+    class User extends BaseModel {
+      static fields = {
+        id: {type: 'uuid', primaryKey: true},
+        tasks: {type: 'hasMany', model: 'Task'},
+      };
+    }
+
+    Task._register();
+    User._register();
+
+    let capturedArgs = null;
+    Task.list = async (args) => {
+      capturedArgs = args;
+      return [];
+    };
+
+    const fakeOrm = {models: {Task, User}};
+    Task.orm = fakeOrm;
+    User.orm = fakeOrm;
+
+    const user = Object.create(User.prototype);
+    user.primaryKey = 'user-1';
+
+    await user.getRelated('tasks');
+    assert.deepStrictEqual(capturedArgs, {where: {userId: 'user-1'}});
+  });
+
   it('toSchema exposes model metadata', () => {
     class Task extends BaseModel {
       static fields = {

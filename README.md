@@ -139,7 +139,7 @@ Adapters are created automatically when a model requests them.
   ```js
   conf: {
     orm: {
-      ldap: { url: 'ldap://localhost', bindDN: '...', bindCredentials: '...' },
+      ldap: { url: 'ldap://localhost', bindDN: '...', bindPassword: '...', userBase: '...' },
     },
   }
   ```
@@ -167,6 +167,11 @@ When used with `@simpleworkjs/backend`, the CLI can diff your model definitions 
 ```bash
 npm test
 ```
+
+## Related packages
+
+- [`@simpleworkjs/orm-identity`](https://github.com/simpleworkjs/orm-identity) — adds users, groups, roles, permissions, and token/session auth on top of this base ORM.
+- [`@simpleworkjs/backend`](https://github.com/simpleworkjs/backend) — Express/Socket.IO framework that turns these models into a REST API, live-syncing UI, and CLI.
 
 ## License
 
