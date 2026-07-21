@@ -1,8 +1,12 @@
 {
   "name": "@simpleworkjs/orm",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Base model-first ORM with multi-backend adapters (SQL, Redis, LDAP) for SimpleWorkJS.",
   "main": "index.js",
+  "simpleworks": {
+    "namespace": "orm",
+    "commands": "./cli/commands.js"
+  },
   "scripts": {
     "test": "node --test test/**/*.test.js"
   },
