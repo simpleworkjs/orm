@@ -72,3 +72,36 @@ describe('ORM.load', () => {
     await orm.close();
   });
 });
+
+describe('instance.update', () => {
+  it('reflects persisted values back onto the instance (no stale properties)', async () => {
+    // Regression: update() wrote through to the backing store but left the
+    // wrapper instance's own properties stale, so `this.field` read the old
+    // value right after `await this.update(...)` — the trap for exposed
+    // instance methods that do `await this.update({x}); return this.x`.
+    const {Model} = require('../index');
+    class Counter extends Model {
+      static fields = {
+        id: {type: 'uuid', primaryKey: true},
+        count: {type: 'int', default: 0},
+        label: {type: 'string'},
+      };
+    }
+
+    const orm = new ORM({orm: {dialect: 'sqlite', storage: ':memory:', logging: false}});
+    await orm.load([Counter]);
+    try {
+      const row = await orm.models.Counter.create({count: 1, label: 'a'});
+      await row.update({count: 5, label: 'b'});
+
+      // The same instance now sees the new values...
+      assert.strictEqual(row.count, 5);
+      assert.strictEqual(row.label, 'b');
+      // ...and a fresh read agrees (it really persisted).
+      const fresh = await orm.models.Counter.get(row.id);
+      assert.strictEqual(fresh.count, 5);
+    } finally {
+      await orm.close();
+    }
+  });
+});

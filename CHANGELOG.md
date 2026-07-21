@@ -13,6 +13,16 @@
   neither. `toPaths()` now includes a `methods` array so the methods are
   discoverable through the backend's `OPTIONS` endpoint.
 
+### Fixed
+
+- **`instance.update()` left the wrapper's own properties stale** (`lib/base.js`):
+  it wrote through to the backing store but never reflected the change back onto
+  the instance, so `this.field` still read the pre-update value right after
+  `await this.update({field: x})`. This bit the natural exposed-instance-method
+  pattern (`await this.update(...); return this.field`). `update()` now assigns
+  the persisted values back onto the instance (adapter-agnostic; preserves
+  private fields' non-enumerability).
+
 ## 0.2.0
 
 ### Changed
