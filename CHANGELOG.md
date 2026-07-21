@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+### Added
+
+- **`writeOnly` field flag** (`lib/fields.js`): fields can be write-only —
+  hidden from output like `isPrivate`, but still settable through input forms.
+  `password-bcrypt` is now `writeOnly` so the generated create/edit UI renders a
+  password field again (a private field alone was stripped from the form, so
+  there was no way to set a user's password). Exposed in the field schema
+  (`toSchema().writeOnly`) so the frontend form builder can include it.
+
 ## 0.2.1
 
 ### Added

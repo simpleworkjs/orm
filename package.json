@@ -1,6 +1,6 @@
 {
   "name": "@simpleworkjs/orm",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Base model-first ORM with multi-backend adapters (SQL, Redis, LDAP) for SimpleWorkJS.",
   "main": "index.js",
   "simpleworks": {

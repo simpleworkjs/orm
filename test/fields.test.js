@@ -77,14 +77,23 @@ describe('Field types', () => {
     assert.strictEqual(def.validate.isEmail, true);
   });
 
-  it('password-bcrypt field is private and hashes on preSave', async () => {
+  it('password-bcrypt field is private, write-only, and hashes on preSave', async () => {
     const f = fields.create('password', {type: 'password-bcrypt'});
     assert.strictEqual(f.isPrivate, true);
+    // Write-only: hidden from output, but still settable on input forms — so
+    // the create/edit UI can render a password field. Exposed in the schema.
+    assert.strictEqual(f.writeOnly, true);
+    assert.strictEqual(f.toSchema().writeOnly, true);
     assert.strictEqual(f.htmlType, 'password');
 
     const hashed = await f.preSave('Secret1!');
     assert.notStrictEqual(hashed, 'Secret1!');
     assert.ok(hashed.startsWith('$2'), 'bcrypt hash prefix');
+  });
+
+  it('ordinary fields are not write-only', () => {
+    assert.strictEqual(fields.create('title', {type: 'string'}).writeOnly, false);
+    assert.strictEqual(fields.create('title', {type: 'string'}).toSchema().writeOnly, false);
   });
 
   it('hasOne relationship stores model and foreignKey', () => {
