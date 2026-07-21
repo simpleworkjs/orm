@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
+
+### Changed
+
+- **Updated dependencies to clear all known advisories.** `bcrypt` `^5.1.1` →
+  `^6.0.0` (drops the vulnerable `@mapbox/node-pre-gyp` → `tar` chain in favour
+  of `node-gyp-build`), `sqlite3` `^5.1.7` → `^6.0.1` (drops the vulnerable
+  `node-gyp` → `tar` chain), `uuid` `^9.0.1` → `^11.1.1`, and `sequelize`
+  `^6.35.2` → `^6.37.8`. Added an `overrides` entry pinning `uuid` to `^11.1.1`
+  so Sequelize's bundled copy is forced up as well. `npm audit` is clean and all
+  tests pass. Consumers on `^0.1.x` should bump to `^0.2.0`.
 
 ### Fixed
 
