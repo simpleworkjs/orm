@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.3
+
+### Added
+
+- **Pagination + permission/pageSize metadata** for the generated UI overhaul:
+  - `static async count(args)` on models (native `count` on the Sequelize
+    adapter; `list().length` fallback on Redis/LDAP).
+  - `static pageSize` (default **20**), surfaced in `toSchema().display.pageSize`.
+  - `toSchema()` now includes a `permissions` map (`{read, create, update,
+    delete}`, resolved via `permissionsFor`). `permissionsSchema()` is the single
+    seam that will switch from code-declared `static permissions` to DB-backed,
+    runtime-editable permissions without changing the OPTIONS payload shape.
+
 ## 0.2.2
 
 ### Added

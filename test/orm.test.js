@@ -105,3 +105,25 @@ describe('instance.update', () => {
     }
   });
 });
+
+describe('count + pagination args', () => {
+  it('count() returns the total and list() honours limit/offset', async () => {
+    class Row extends Model {
+      static fields = {id: {type: 'uuid', primaryKey: true}, n: {type: 'int'}};
+    }
+    const orm = new ORM({orm: {dialect: 'sqlite', storage: ':memory:', logging: false}});
+    await orm.load([Row]);
+    try {
+      for (let i = 0; i < 25; i++) await orm.models.Row.create({n: i});
+
+      assert.strictEqual(await orm.models.Row.count({}), 25);
+
+      const page1 = await orm.models.Row.list({limit: 20, offset: 0, order: [['id', 'ASC']]});
+      assert.strictEqual(page1.length, 20);
+      const page2 = await orm.models.Row.list({limit: 20, offset: 20, order: [['id', 'ASC']]});
+      assert.strictEqual(page2.length, 5, 'last page has the remainder');
+    } finally {
+      await orm.close();
+    }
+  });
+});

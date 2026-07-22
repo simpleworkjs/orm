@@ -127,6 +127,31 @@ describe('BaseModel', () => {
     assert.ok(schema.fields.title);
     assert.strictEqual(schema.display.titleField, 'title');
   });
+
+  it('toSchema exposes permissions per action and the page size', () => {
+    class Note extends BaseModel {
+      static fields = {id: {type: 'uuid', primaryKey: true}};
+      static permissions = {read: ['user'], update: ['admin', 'owner']};
+      static pageSize = 42;
+    }
+    Note._register();
+    const schema = Note.toSchema();
+
+    // Declared plus resolved defaults for actions not declared.
+    assert.deepStrictEqual(schema.permissions.read, ['user']);
+    assert.deepStrictEqual(schema.permissions.update, ['admin', 'owner']);
+    assert.deepStrictEqual(schema.permissions.create, ['admin']); // default
+    assert.deepStrictEqual(schema.permissions.delete, ['admin']); // default
+    assert.strictEqual(schema.display.pageSize, 42);
+  });
+
+  it('defaults pageSize to 20', () => {
+    class Thing extends BaseModel {
+      static fields = {id: {type: 'uuid', primaryKey: true}};
+    }
+    Thing._register();
+    assert.strictEqual(Thing.toSchema().display.pageSize, 20);
+  });
 });
 
 describe('BaseModel.getExposedMethods', () => {
