@@ -96,6 +96,16 @@ describe('Field types', () => {
     assert.strictEqual(fields.create('title', {type: 'string'}).toSchema().writeOnly, false);
   });
 
+  it('json field passes objects through and parses JSON strings on preSave', async () => {
+    const f = fields.create('meta', {type: 'json'});
+    assert.strictEqual(f.type, 'json');
+    const obj = {a: 1, nested: {b: true}};
+    assert.strictEqual(await f.preSave(obj), obj, 'objects pass through unchanged');
+    assert.deepStrictEqual(await f.preSave('{"a":1}'), {a: 1}, 'JSON string is parsed');
+    assert.strictEqual(await f.preSave('not json'), 'not json', 'invalid JSON left as-is');
+    assert.strictEqual(await f.preSave(''), '', 'empty string untouched');
+  });
+
   it('hasOne relationship stores model and foreignKey', () => {
     const f = fields.create('owner', {type: 'hasOne', model: 'User'});
     assert.strictEqual(f.type, 'hasOne');

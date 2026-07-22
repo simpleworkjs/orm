@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.4
+
+### Added
+
+- **`json` field type** (`lib/fields.js`): Sequelize `DataTypes.JSON`; accepts an
+  object or a JSON string and persists a real object. Backs the entity-permission
+  grants on Roles.
+- **Reggy-style tiered access** on `BaseModel`. `hasPermission`/`canAccess` now
+  consult a runtime, DB-backed policy (`orm._accessPolicy`, built by
+  `@simpleworkjs/orm-identity` from the entity grants on active Roles):
+  `{owner, group, everyone} × {create, read, update, delete}`, resolved per record
+  from the caller's relationship (grants cascade — an owner also gets group/
+  everyone grants); admins bypass. Falls back to the token rules when a model has
+  no policy yet, so nothing changes until rules exist. `toSchema()` gains an
+  `access` grid (and `permissions` is derived from it); `_staticAccessDefaults()`
+  translates the code-declared `static permissions` into the tiered shape (used
+  to seed the DB defaults).
+
 ## 0.2.3
 
 ### Added

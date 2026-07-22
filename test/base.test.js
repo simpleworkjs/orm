@@ -128,7 +128,7 @@ describe('BaseModel', () => {
     assert.strictEqual(schema.display.titleField, 'title');
   });
 
-  it('toSchema exposes permissions per action and the page size', () => {
+  it('toSchema exposes tiered access, a permission summary, and the page size', () => {
     class Note extends BaseModel {
       static fields = {id: {type: 'uuid', primaryKey: true}};
       static permissions = {read: ['user'], update: ['admin', 'owner']};
@@ -137,11 +137,18 @@ describe('BaseModel', () => {
     Note._register();
     const schema = Note.toSchema();
 
-    // Declared plus resolved defaults for actions not declared.
+    // Tiered grants translated from the static tokens: user -> everyone,
+    // owner -> owner, admin -> the isAdmin bypass (no tier).
+    assert.strictEqual(schema.access.everyone.read, true);
+    assert.strictEqual(schema.access.owner.update, true);
+    assert.strictEqual(schema.access.everyone.update, false);
+    assert.strictEqual(schema.access.everyone.create, false); // default create is admin-only
+
+    // Per-action summary derived from the tiers (admin-only actions show 'admin').
     assert.deepStrictEqual(schema.permissions.read, ['user']);
-    assert.deepStrictEqual(schema.permissions.update, ['admin', 'owner']);
-    assert.deepStrictEqual(schema.permissions.create, ['admin']); // default
-    assert.deepStrictEqual(schema.permissions.delete, ['admin']); // default
+    assert.deepStrictEqual(schema.permissions.update, ['owner']);
+    assert.deepStrictEqual(schema.permissions.create, ['admin']);
+    assert.deepStrictEqual(schema.permissions.delete, ['admin']);
     assert.strictEqual(schema.display.pageSize, 42);
   });
 
@@ -213,5 +220,61 @@ describe('BaseModel.getExposedMethods', () => {
     }
     Bad._register();
     assert.throws(() => Bad.getExposedMethods(), /neither an instance method/);
+  });
+});
+
+describe('BaseModel tiered access (canAccess)', () => {
+  function makeModel() {
+    class Doc extends BaseModel {
+      static fields = {id: {type: 'uuid', primaryKey: true}, createdBy: {type: 'hasOne', model: 'User'}};
+    }
+    Doc._register();
+    // Simulate the runtime policy the ORM instance would carry.
+    Doc.orm = {_accessPolicy: {Doc: {
+      owner: {create: false, read: true, update: true, delete: true},
+      group: {create: false, read: false, update: false, delete: false},
+      everyone: {create: true, read: true, update: false, delete: false},
+    }}};
+    return Doc;
+  }
+
+  const alice = {id: 'a', permissions: []};
+  const bob = {id: 'b', permissions: []};
+  const admin = {id: 'x', permissions: ['admin']};
+
+  it('grants everyone-tier actions to any authenticated user', () => {
+    const Doc = makeModel();
+    assert.strictEqual(Doc.canAccess(alice, 'read', null), true);   // everyone.read
+    assert.strictEqual(Doc.canAccess(alice, 'create', null), true); // everyone.create
+    assert.strictEqual(Doc.canAccess(alice, 'update', null), false); // everyone.update false, no record
+  });
+
+  it('grants owner-tier actions to the record owner (grants cascade)', () => {
+    const Doc = makeModel();
+    assert.strictEqual(Doc.canAccess(alice, 'update', {createdById: 'a'}), true);  // owner.update
+    assert.strictEqual(Doc.canAccess(bob, 'update', {createdById: 'a'}), false);   // not owner -> everyone.update false
+    assert.strictEqual(Doc.canAccess(bob, 'read', {createdById: 'a'}), true);      // everyone.read
+  });
+
+  it('admins bypass everything', () => {
+    const Doc = makeModel();
+    assert.strictEqual(Doc.canAccess(admin, 'delete', {createdById: 'a'}), true);
+  });
+
+  it('anonymous requests fall through to the token rules', () => {
+    const Doc = makeModel();
+    // No user -> _accessCheck returns null -> token eval. Default read is ['user'],
+    // which denies an unauthenticated caller.
+    assert.strictEqual(Doc.canAccess(null, 'read', null), false);
+  });
+
+  it('falls back to token rules when the model has no policy', () => {
+    class Free extends BaseModel {
+      static fields = {id: {type: 'uuid', primaryKey: true}};
+      static permissions = {read: ['public']};
+    }
+    Free._register();
+    Free.orm = {_accessPolicy: {}}; // no rule for Free
+    assert.strictEqual(Free.canAccess(null, 'read', null), true); // public token
   });
 });
