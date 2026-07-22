@@ -47,12 +47,14 @@ class Task extends Model {
 | `int` / `integer` | Integer | `min`, `max` |
 | `float` | Floating point | — |
 | `boolean` | Boolean | `default` |
+| `json` | JSON object | — |
 | `date` | Date/time | — |
 | `uuid` | UUID, defaults to `UUIDV4` | `primaryKey` |
 | `email` | String with email validation | — |
 | `password-bcrypt` | String hashed with bcrypt, private | `saltRounds` |
 | `hasOne` | Foreign-key relationship | `model`, `remoteKey`, `isRequired` |
 | `hasMany` | Reverse relationship | `model`, `remoteKey` |
+| `belongsToMany` | Many-to-many through join model | `model`, `through`, `foreignKey`, `otherKey` |
 
 ### Common field options
 
@@ -157,6 +159,189 @@ await one.delete();
 ```
 
 Instance data is accessed as normal properties. `toJSON()` returns a plain object without private fields.
+
+### Hooks / lifecycle callbacks
+
+Models can register hooks that run at various lifecycle points:
+
+```js
+class Task extends Model {
+  static fields = { /* ... */ };
+}
+
+// Hook registration (all return the Model for chaining)
+Task.beforeCreate((data, options) => { /* modify data before insert */ });
+Task.afterCreate((instance, options) => { /* e.g. send notification */ });
+Task.beforeUpdate((data, options, instance) => { /* modify data before update */ });
+Task.afterUpdate((instance, options) => { /* e.g. invalidate cache */ });
+Task.beforeDestroy((instance, options) => { /* e.g. check dependencies */ });
+Task.afterDestroy((instance, options) => { /* e.g. cleanup related records */ });
+Task.beforeValidate((data, options, instance) => { /* pre-validation transform */ });
+Task.afterValidate((data, options, instance) => { /* post-validation check */ });
+Task.beforeSave((data, options, type, instance) => { /* runs before create or update */ });
+Task.afterSave((instance, options, type) => { /* runs after create or update */ });
+
+// Alternative: addHook method
+Task.addHook('beforeCreate', fn);
+```
+
+Hooks fire in order — multiple hooks of the same type all execute in registration order.
+
+### Validation
+
+Field-level and model-level validators run automatically before `create()` and `update()`:
+
+```js
+class Task extends Model {
+  static fields = {
+    title: {
+      type: 'string',
+      validate: {
+        custom: (value) => {
+          if (value.length < 3) throw new Error('title must be at least 3 chars');
+        },
+      },
+    },
+  };
+}
+
+// Model-level validator (e.g. cross-field validation)
+Task.addValidator('dateOrder', (data) => {
+  if (new Date(data.start) > new Date(data.end)) {
+    throw new Error('start date must be before end date');
+  }
+});
+
+// Async validators are supported (e.g. uniqueness check)
+Task.addValidator('uniqueName', async (data) => {
+  const existing = await Task.list({where: {name: data.name}});
+  if (existing.length > 0) throw new Error('name already exists');
+});
+```
+
+Validation errors throw an `Error` with a `validationErrors` array containing `{field, validator, message}` objects.
+
+### Soft-delete (paranoid mode)
+
+Models can enable paranoid mode to soft-delete records instead of removing them:
+
+```js
+class Task extends Model {
+  static fields = {
+    id: {type: 'uuid', primaryKey: true},
+    name: {type: 'string'},
+    is_deleted: {type: 'boolean', default: false},
+  };
+  static paranoid = true;        // Enable soft-delete
+  static deletedField = 'is_deleted';  // Default field name
+}
+
+// Soft-delete a record (marks is_deleted = true)
+await task.delete();  // or task.softDelete()
+
+// Hard-delete (permanently remove)
+await task.delete({force: true});
+
+// Restore a soft-deleted record
+await task.restore();
+
+// list() and get() automatically filter out deleted records
+const tasks = await Task.list();  // excludes deleted
+const task = await Task.get(id);  // null if deleted
+
+// Include deleted records
+const task = await Task.get(id, {includeDeleted: true});
+const all = await Task.list({where: {is_deleted: {ne: true}}});  // explicit filter
+```
+
+### Query operators
+
+The `where` clause supports operators for advanced filtering:
+
+```js
+// Greater than / less than
+Model.list({where: {value: {gt: 10}}});   // value > 10
+Model.list({where: {value: {gte: 10}}});  // value >= 10
+Model.list({where: {value: {lt: 10}}});   // value < 10
+Model.list({where: {value: {lte: 10}}});  // value <= 10
+
+// Not equal
+Model.list({where: {status: {ne: 'deleted'}}});
+
+// IN array
+Model.list({where: {status: {in: ['active', 'pending']}}});
+
+// LIKE pattern (SQL only)
+Model.list({where: {name: {like: '%Doe%'}}});
+
+// Combined operators
+Model.list({
+  where: {
+    value: {gte: 10},
+    status: 'active',
+  },
+});
+```
+
+### Transactions
+
+Transactions are supported for the Sequelize adapter:
+
+```js
+// Auto-managed transaction (commits on success, rolls back on error)
+await orm.transaction(async ({transaction}) => {
+  const parent = await ParentModel.create({name: 'parent'}, {transaction});
+  await ChildModel.create({parentId: parent.id, name: 'child'}, {transaction});
+});
+
+// Manual transaction control
+const t = await orm.transaction();
+try {
+  await Model.create(data, {transaction: t});
+  await t.commit();
+} catch (e) {
+  await t.rollback();
+  throw e;
+}
+```
+
+### belongsToMany (many-to-many) relationships
+
+Many-to-many relationships through a join model:
+
+```js
+// Join model
+class UserRole extends Model {
+  static fields = {
+    id: {type: 'uuid', primaryKey: true},
+    userId: {type: 'uuid'},
+    roleId: {type: 'uuid'},
+  };
+}
+
+// Models with belongsToMany
+class User extends Model {
+  static fields = {
+    id: {type: 'uuid', primaryKey: true},
+    roles: {type: 'belongsToMany', model: 'Role', through: 'UserRole'},
+  };
+}
+
+class Role extends Model {
+  static fields = {
+    id: {type: 'uuid', primaryKey: true},
+    users: {type: 'belongsToMany', model: 'User', through: 'UserRole'},
+  };
+}
+```
+
+### listDetail()
+
+For Redis adapter parity, `list()` accepts `{detail: true}` to explicitly return full objects:
+
+```js
+const results = await Model.list({detail: true});  // same as list() for SQL
+```
 
 ### Exposing custom methods
 

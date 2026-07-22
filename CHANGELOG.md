@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.2.6
+
+### Added
+
+- **Hooks/lifecycle callbacks** (`lib/base.js`): Models can now register hooks that
+  fire at lifecycle points: `beforeCreate`, `afterCreate`, `beforeUpdate`,
+  `afterUpdate`, `beforeDestroy`, `afterDestroy`, `beforeValidate`, `afterValidate`,
+  `beforeSave`, `afterSave`. Hooks are registered via `Model.beforeCreate(fn)` or
+  `Model.addHook('beforeCreate', fn)`. Multiple hooks of the same type fire in
+  registration order.
+
+- **Validation pipeline** (`lib/base.js`): Field-level and model-level validators
+  run automatically before `create()` and `update()`. Field validators use
+  `validate: {custom: (value) => {...}}`. Model validators are registered via
+  `Model.addValidator('name', fn)`. Async validators are supported. Validation
+  errors throw an `Error` with a `validationErrors` array.
+
+- **Soft-delete (paranoid mode)** (`lib/base.js`): Models can enable
+  `static paranoid = true` to soft-delete records. `delete()` marks
+  `is_deleted = true` instead of removing the row; `restore()` brings it back.
+  `list()` and `get()` automatically filter deleted records. Use
+  `delete({force: true})` for hard-delete. Custom field name via
+  `static deletedField = 'deleted'`.
+
+- **Query operators** (`lib/adapters/sequelize.js`): The `where` clause now
+  supports operators: `{gt, gte, lt, lte, ne, in, not, like, iLike, is}`.
+  Example: `Model.list({where: {value: {gt: 10}}})`.
+
+- **Transaction support** (`lib/orm.js`): `orm.transaction()` supports both
+  auto-managed transactions (`await orm.transaction(async ({t}) => {...})`)
+  and manual control (`t.commit()` / `t.rollback()`). Transactions are passed
+  via `{transaction: t}` to `create()`, `update()`, `delete()`, and `get()`.
+
+- **belongsToMany field type** (`lib/fields.js`): Many-to-many relationships
+  through a join model. Options: `model`, `through`, `foreignKey`, `otherKey`.
+
+- **listDetail()** (`lib/base.js`, `lib/adapters/sequelize.js`): `Model.list()`
+  accepts `{detail: true}` for explicit full-object returns (Redis adapter parity).
+
+## 0.2.5
+
+### Changed
+
+- Version bump only — published to capture 0.2.4 features that weren't included
+  in the npm release.
+
 ## 0.2.4
 
 ### Added
