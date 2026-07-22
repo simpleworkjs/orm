@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.7
+
+### Fixed
+
+- **Redis adapter compatibility with a `model-redis`-style backing `Table`**
+  (`lib/adapters/redis.js`): the adapter assumed the backing table always exposed
+  `register()` and `create()`. It now guards both — calling `register()` only when
+  present and falling back to `add()` when the table has no `create()` — so a
+  `Table` implementation that predates those names still works. Also sets the
+  backing model's `name` via `Object.defineProperty` (a plain assignment to the
+  read-only class `name` is silently ignored in strict mode). Part of the ongoing
+  Redis-adapter completion work.
+
 ## 0.2.6
 
 ### Added
